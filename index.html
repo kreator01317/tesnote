@@ -950,7 +950,8 @@
           break;
       }
 
-      const blob = new Blob([content], { type: mimeType });
+      const BOM = '\uFEFF';
+const blob = new Blob([BOM + content], { type: mimeType + ';charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
