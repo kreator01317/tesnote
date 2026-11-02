@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Noted - Aplikasi Catatan & Folder</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9', 600: '#0284c7', 700: '#0369a1' }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Font Awesome & Google Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  
+  <!-- jsPDF untuk export PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+  <style>
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.7); }
+    [contenteditable=true]:empty:before { content: attr(placeholder); color: #9ca3af; pointer-events: none; display: block; }
+    .toolbar-group { transition: all 0.2s ease; }
+    .toolbar-group:hover { transform: translateY(-1px); }
+    .tb-btn.is-active { background-color: #e0f2fe !important; color: #0284c7 !important; border-color: #7dd3fc !important; }
+    .dark .tb-btn.is-active { background-color: #0c4a6e !important; color: #7dd3fc !important; border-color: #0369a1 !important; }
+    .fade-in { animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-radius: 50%; border-top-color: white; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    /* Perbaikan ukuran untuk sidebar dan folder */
+    .nav-item {
+      @apply text-base py-3 px-4;
+    }
+    .nav-item i {
+      @apply w-5 text-base;
+    }
+    .folder-item {
+      @apply text-base py-2.5 px-3;
+    }
+    .folder-item i {
+      @apply text-base;
+    }
+    #noteFolderSelect {
+      @apply text-base py-1.5 px-3;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-100 flex flex-col overflow-hidden transition-colors duration-200">
+
+  <!-- AUTH SCREEN -->
+  <div id="authScreen" class="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center p-4 fade-in">
+    <div class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+      <div class="text-center">
+        <div class="w-16 h-16 rounded-xl bg-brand-500 text-white flex items-center justify-center mx-auto mb-4 shadow-lg">
+          <i class="fa-solid fa-note-sticky text-2xl"></i>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Noted</h1>
+        <p class="text-gray-500 dark:text-gray-400 mt-2 text-sm">Masuk untuk menyinkronkan catatan Anda di semua perangkat.</p>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+          <input type="email" id="authEmail" placeholder="nama@email.com" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+          <input type="password" id="authPassword" placeholder="Minimal 6 karakter" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all">
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <button onclick="handleLogin()" id="btnLogin" class="w-full bg-brand-600 hover:bg-brand-700 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2">
+          <span>Masuk</span>
+        </button>
+        <button onclick="handleRegister()" id="btnRegister" class="w-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white py-2.5 rounded-lg font-medium transition-colors">
+          Daftar Akun Baru
+        </button>
+      </div>
+
+      <div id="authError" class="hidden bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm text-center"></div>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="mainApp" class="hidden h-full w-full flex-col fade-in overflow-hidden">
+    <header class="h-14 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 flex items-center justify-between px-4 z-20 shrink-0">
+      <div class="flex items-center space-x-3">
+        <button id="toggleSidebarMobile" class="md:hidden p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-brand-500 text-white flex items-center justify-center font-bold text-lg shadow-md">
+            <i class="fa-solid fa-note-sticky"></i>
+          </div>
+          <span class="font-bold text-xl tracking-tight hidden sm:inline">Noted</span>
+        </div>
+      </div>
+
+      <div class="flex-1 max-w-md mx-4">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+          <input type="text" id="searchInput" placeholder="Cari catatan atau tag..." 
+            class="w-full pl-9 pr-8 py-1.5 bg-gray-100 dark:bg-gray-800 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 transition-all border border-transparent dark:border-gray-700">
+          <button id="clearSearchBtn" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-2">
+        <button id="btnNewNote" class="hidden md:flex bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium items-center space-x-1.5 shadow-sm transition-colors">
+          <i class="fa-solid fa-plus text-xs"></i>
+          <span>Catatan Baru</span>
+        </button>
+
+        <div class="relative">
+          <button id="btnUserMenu" class="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm flex items-center space-x-2">
+            <div class="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-sm font-bold" id="userAvatar">U</div>
+          </button>
+          <div id="userMenuDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 text-sm">
+            <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+              <p class="font-medium text-gray-900 dark:text-white text-xs truncate" id="userEmailDisplay">user@email.com</p>
+            </div>
+            <button onclick="handleLogout()" class="w-full text-left px-4 py-2 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center space-x-2">
+              <i class="fa-solid fa-sign-out-alt w-4"></i>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+
+        <button id="themeToggle" class="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-sm">
+          <i id="themeIcon" class="fa-solid fa-moon"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden relative w-full h-full">
+      <div id="sidebarBackdrop" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-0 hidden md:hidden transition-opacity duration-200 opacity-0"></div>
+
+    <aside id="sidebar" class="w-64 bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 absolute md:relative inset-y-0 left-0 z-10 transform -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out h-full">
+  <!-- APP BRANDING DI SIDEBAR - Tanpa spacing di atas -->
+  <div class="px-6 pt-4 pb-5 border-b border-gray-200 dark:border-gray-800">
+    <div class="flex items-center space-x-3">
+      <div class="w-12 h-12 rounded-xl bg-brand-500 text-white flex items-center justify-center font-bold text-2xl shadow-lg">
+        <i class="fa-solid fa-note-sticky"></i>
+      </div>
+      <div class="flex-1">
+        <h2 class="font-bold text-xl text-gray-900 dark:text-white leading-tight">Noted</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Aplikasi Catatan</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="p-3 space-y-1">
+          <button id="navAllNotes" class="nav-item active w-full flex items-center justify-between rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            <div class="flex items-center space-x-3"><i class="fa-solid fa-notes-medical text-brand-500"></i><span>Semua Catatan</span></div>
+            <span id="countAllNotes" class="text-sm bg-gray-200 dark:bg-gray-800 px-2.5 py-1 rounded-full text-gray-600 dark:text-gray-400">0</span>
+          </button>
+          <button id="navFavorites" class="nav-item w-full flex items-center justify-between rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            <div class="flex items-center space-x-3"><i class="fa-solid fa-star text-amber-500"></i><span>Favorit</span></div>
+            <span id="countFavorites" class="text-sm bg-gray-200 dark:bg-gray-800 px-2.5 py-1 rounded-full text-gray-600 dark:text-gray-400">0</span>
+          </button>
+          <button id="navTrash" class="nav-item w-full flex items-center justify-between rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            <div class="flex items-center space-x-3"><i class="fa-solid fa-trash text-red-500"></i><span>Sampah</span></div>
+            <span id="countTrash" class="text-sm bg-gray-200 dark:bg-gray-800 px-2.5 py-1 rounded-full text-gray-600 dark:text-gray-400">0</span>
+          </button>
+        </div>
+
+        <div class="px-4 pt-4 pb-2 flex items-center justify-between">
+          <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 tracking-wider uppercase">Folder Saya</span>
+          <button id="btnAddRootFolder" title="Buat Folder Utama Baru" class="text-gray-500 hover:text-brand-500 p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"><i class="fa-solid fa-folder-plus text-base"></i></button>
+        </div>
+        <div class="flex-1 overflow-y-auto px-2 space-y-1" id="folderTreeContainer"></div>
+
+        <div class="px-4 pt-3 pb-2 flex items-center justify-between border-t border-gray-200 dark:border-gray-800">
+          <span class="text-sm font-semibold text-gray-500 dark:text-gray-400 tracking-wider uppercase">Tag</span>
+        </div>
+        <div class="px-3 pb-3 overflow-y-auto max-h-36 flex flex-wrap gap-2" id="tagListContainer"></div>
+      </aside>
+
+      <section id="notesListPanel" class="w-full md:w-80 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col shrink-0 h-full">
+        <div class="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-950/50">
+          <div>
+            <h2 id="currentCategoryTitle" class="font-bold text-base truncate">Semua Catatan</h2>
+            <p id="notesCountSubtitle" class="text-xs text-gray-500">0 Catatan</p>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button id="btnSort" title="Urutkan Catatan" class="p-1.5 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg text-xs"><i class="fa-solid fa-arrow-down-short-wide"></i></button>
+            <button id="btnToggleLayout" title="Ubah Tampilan Grid/List" class="p-1.5 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg text-xs"><i id="layoutIcon" class="fa-solid fa-list"></i></button>
+          </div>
+        </div>
+        <div id="filterBadgeBar" class="hidden px-3 py-1.5 bg-brand-50 dark:bg-brand-950/40 border-b border-brand-100 dark:border-brand-900 flex items-center justify-between text-xs text-brand-700 dark:text-brand-300">
+          <span id="filterBadgeText">Filter aktif</span>
+          <button id="btnClearFilter" class="hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="notesContainer" class="flex-1 overflow-y-auto p-2 space-y-2"></div>
+      </section>
+
+      <main id="editorPanel" class="flex-1 bg-white dark:bg-gray-950 flex flex-col overflow-hidden hidden md:flex h-full">
+        <div id="editorHeader" class="border-b border-gray-200 dark:border-gray-800 flex flex-col bg-white dark:bg-gray-950 shrink-0">
+          <div class="px-4 py-2 flex items-center justify-between border-b border-gray-100 dark:border-gray-900">
+            <div class="flex items-center space-x-2 text-sm text-gray-500">
+              <button id="btnBackToList" class="md:hidden p-1 mr-1 text-gray-600 dark:text-gray-300"><i class="fa-solid fa-arrow-left text-base"></i></button>
+              <i class="fa-regular fa-folder text-brand-500"></i>
+              <select id="noteFolderSelect" class="bg-transparent text-base text-gray-700 dark:text-gray-300 font-medium focus:outline-none cursor-pointer hover:text-brand-500 min-w-[150px]">
+                <option value=""> (Tanpa Folder)</option>
+              </select>
+            </div>
+            <div class="flex items-center space-x-1" id="noteActionsBar">
+              <button id="btnToggleFavorite" title="Tandai Favorit" class="p-2 text-gray-400 hover:text-amber-500 rounded-lg"><i id="favIcon" class="fa-regular fa-star text-lg"></i></button>
+              
+              <div class="relative">
+                <button id="btnExportNote" title="Ekspor Catatan" class="p-2 text-gray-400 hover:text-brand-500 rounded-lg">
+                  <i class="fa-solid fa-download text-lg"></i>
+                </button>
+                <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 text-base">
+                  <button onclick="exportNote('txt')" class="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center space-x-3 transition-colors">
+                    <i class="fa-regular fa-file-lines w-5 text-center"></i><span>Text (.txt)</span>
+                  </button>
+                  <button onclick="exportNote('json')" class="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center space-x-3 transition-colors">
+                    <i class="fa-solid fa-code w-5 text-center"></i><span>JSON (.json)</span>
+                  </button>
+                  <button onclick="exportNote('md')" class="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center space-x-3 transition-colors">
+                    <i class="fa-brands fa-markdown w-5 text-center"></i><span>Markdown (.md)</span>
+                  </button>
+                  <button onclick="exportNote('html')" class="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center space-x-3 transition-colors">
+                    <i class="fa-brands fa-html5 w-5 text-center"></i><span>HTML (.html)</span>
+                  </button>
+                  <button onclick="exportNote('pdf')" class="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center space-x-3 transition-colors">
+                    <i class="fa-solid fa-file-pdf w-5 text-center text-red-500"></i><span>PDF (.pdf)</span>
+                  </button>
+                  <button onclick="exportNote('csv')" class="w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 flex items-center space-x-3 transition-colors">
+                    <i class="fa-solid fa-file-csv w-5 text-center text-green-500"></i><span>CSV (.csv)</span>
+                  </button>
+                </div>
+              </div>
+
+              <button id="btnDeleteNote" title="Hapus Catatan (Sampah)" class="p-2 text-gray-400 hover:text-red-500 rounded-lg"><i class="fa-regular fa-trash-can text-lg"></i></button>
+              <button id="btnRestoreNote" title="Pulihkan Catatan" class="hidden px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg"><i class="fa-solid fa-rotate-left mr-1"></i> Pulihkan</button>
+              <button id="btnPermanentDelete" title="Hapus Permanen" class="hidden px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg"><i class="fa-solid fa-xmark mr-1"></i> Hapus Permanen</button>
+            </div>
+          </div>
+
+          <div id="formattingToolbarContainer" class="hidden opacity-0 transform -translate-y-2 transition-all duration-300 ease-out px-4 py-2 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 shadow-sm z-10">
+            <div class="md:hidden flex items-center justify-between">
+              <div class="flex items-center space-x-1 overflow-x-auto pb-1 flex-1 scrollbar-hide">
+                <div class="toolbar-group flex items-center space-x-0.5 bg-white dark:bg-gray-800 rounded-lg p-0.5 shadow-sm border border-gray-200 dark:border-gray-700">
+                  <button data-cmd="bold" title="Bold" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 font-bold text-base min-w-[36px]">B</button>
+                  <button data-cmd="italic" title="Italic" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 italic text-base min-w-[36px]">I</button>
+                  <button data-cmd="underline" title="Underline" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 underline text-base min-w-[36px]">U</button>
+                </div>
+                <div class="toolbar-group flex items-center space-x-0.5 bg-white dark:bg-gray-800 rounded-lg p-0.5 shadow-sm border border-gray-200 dark:border-gray-700 ml-1">
+                  <button data-cmd="formatBlock" data-val="h1" title="Heading 1" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 font-bold text-sm min-w-[36px]">H1</button>
+                  <button data-cmd="formatBlock" data-val="h2" title="Heading 2" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 font-bold text-sm min-w-[36px]">H2</button>
+                </div>
+                <div class="toolbar-group flex items-center space-x-0.5 bg-white dark:bg-gray-800 rounded-lg p-0.5 shadow-sm border border-gray-200 dark:border-gray-700 ml-1">
+                  <button data-cmd="insertUnorderedList" title="Bullet List" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 min-w-[36px]"><i class="fa-solid fa-list-ul text-sm"></i></button>
+                  <button data-cmd="insertOrderedList" title="Numbered List" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 min-w-[36px]"><i class="fa-solid fa-list-ol text-sm"></i></button>
+                  <button id="toggleMoreTools" class="tb-btn p-2 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 min-w-[36px]"><i class="fa-solid fa-ellipsis-h text-sm"></i></button>
+                </div>
+              </div>
+            </div>
+            
+            <div id="expandedTools" class="hidden md:hidden mt-2 pb-2 border-t border-gray-200 dark:border-gray-700 pt-2">
+              <div class="flex items-center space-x-2 overflow-x-auto">
+                <button data-cmd="strikeThrough" title="Strikethrough" class="tb-btn p-2 bg-white dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-300 line-through text-base shadow-sm border border-gray-200 dark:border-gray-700">S</button>
+                <button data-cmd="formatBlock" data-val="p" title="Paragraf" class="tb-btn p-2 bg-white dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-300 text-base shadow-sm border border-gray-200 dark:border-gray-700">P</button>
+                <button data-cmd="formatBlock" data-val="pre" title="Code Block" class="tb-btn p-2 bg-white dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-gray-700 rounded-lg text-gray-700 dark:text-gray-300 shadow-sm border border-gray-200 dark:border-gray-700"><i class="fa-solid fa-code text-sm"></i></button>
+                <label class="p-2 bg-white dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer shadow-sm border border-gray-200 dark:border-gray-700" title="Warna Teks">
+                  <i class="fa-solid fa-palette text-gray-700 dark:text-gray-300 text-sm"></i>
+                  <input type="color" id="textColorPicker" class="opacity-0 w-0 h-0">
+                </label>
+                <label class="p-2 bg-white dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer shadow-sm border border-gray-200 dark:border-gray-700" title="Sorot Teks">
+                  <i class="fa-solid fa-highlighter text-gray-700 dark:text-gray-300 text-sm"></i>
+                  <input type="color" id="highlightColorPicker" class="opacity-0 w-0 h-0" value="#fef08a">
+                </label>
+                <button data-cmd="removeFormat" title="Hapus Format" class="tb-btn p-2 bg-white dark:bg-gray-800 hover:bg-brand-50 dark:hover:bg-gray-700 rounded-lg text-red-500 shadow-sm border border-gray-200 dark:border-gray-700"><i class="fa-solid fa-eraser text-sm"></i></button>
+              </div>
+            </div>
+
+            <div class="hidden md:flex items-center space-x-3">
+              <div class="toolbar-group flex items-center space-x-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
+                <button data-cmd="bold" title="Bold (Ctrl+B)" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded font-bold text-gray-700 dark:text-gray-300 w-9 h-9 text-base">B</button>
+                <button data-cmd="italic" title="Italic (Ctrl+I)" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded italic text-gray-700 dark:text-gray-300 w-9 h-9 text-base">I</button>
+                <button data-cmd="underline" title="Underline (Ctrl+U)" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded underline text-gray-700 dark:text-gray-300 w-9 h-9 text-base">U</button>
+                <button data-cmd="strikeThrough" title="Strikethrough" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded line-through text-gray-700 dark:text-gray-300 w-9 h-9 text-base">S</button>
+              </div>
+              <div class="toolbar-group flex items-center space-x-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
+                <button data-cmd="formatBlock" data-val="h1" title="Heading 1" class="tb-btn px-2.5 py-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded font-bold text-gray-700 dark:text-gray-300 text-base">H1</button>
+                <button data-cmd="formatBlock" data-val="h2" title="Heading 2" class="tb-btn px-2.5 py-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded font-bold text-gray-700 dark:text-gray-300 text-base">H2</button>
+                <button data-cmd="formatBlock" data-val="p" title="Paragraf Normal" class="tb-btn px-2.5 py-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 text-base">P</button>
+              </div>
+              <div class="toolbar-group flex items-center space-x-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
+                <button data-cmd="insertUnorderedList" title="Bullet List" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 w-9 h-9 text-base"><i class="fa-solid fa-list-ul text-sm"></i></button>
+                <button data-cmd="insertOrderedList" title="Numbered List" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 w-9 h-9 text-base"><i class="fa-solid fa-list-ol text-sm"></i></button>
+                <button data-cmd="formatBlock" data-val="pre" title="Code Block" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 w-9 h-9 text-base"><i class="fa-solid fa-code text-sm"></i></button>
+              </div>
+              <div class="toolbar-group flex items-center space-x-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm border border-gray-200 dark:border-gray-700">
+                <label class="p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded cursor-pointer w-9 h-9 flex items-center justify-center" title="Warna Teks">
+                  <i class="fa-solid fa-palette text-gray-700 dark:text-gray-300 text-sm"></i>
+                  <input type="color" id="textColorPicker" class="opacity-0 w-0 h-0">
+                </label>
+                <label class="p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded cursor-pointer w-9 h-9 flex items-center justify-center" title="Sorot Teks">
+                  <i class="fa-solid fa-highlighter text-gray-700 dark:text-gray-300 text-sm"></i>
+                  <input type="color" id="highlightColorPicker" class="opacity-0 w-0 h-0" value="#fef08a">
+                </label>
+                <button data-cmd="removeFormat" title="Hapus Format Teks" class="tb-btn p-1.5 hover:bg-brand-50 dark:hover:bg-gray-700 rounded text-red-500 w-9 h-9 text-base"><i class="fa-solid fa-eraser text-sm"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="editorBody" class="flex-1 overflow-y-auto p-6 space-y-4 max-w-4xl w-full mx-auto">
+          <input type="text" id="noteTitleInput" placeholder="Judul Catatan..." class="w-full text-2xl md:text-3xl font-bold bg-transparent focus:outline-none border-b border-transparent focus:border-brand-500 pb-2 transition-all">
+          <div class="flex items-center flex-wrap gap-2 py-1" id="noteTagsWrapper">
+            <i class="fa-solid fa-tags text-gray-400 text-sm mr-1"></i>
+            <div id="activeTagsContainer" class="flex flex-wrap gap-1"></div>
+            <input type="text" id="addTagInput" placeholder="+ Tambah tag (Tekan Enter)..." class="text-sm bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-md focus:outline-none focus:ring-1 focus:ring-brand-500 border border-transparent dark:border-gray-700">
+          </div>
+          <div id="noteContentEditor" contenteditable="true" placeholder="Mulai menulis catatan Anda di sini..." class="w-full min-h-[350px] focus:outline-none text-base leading-relaxed text-gray-800 dark:text-gray-200"></div>
+        </div>
+
+        <div id="editorFooter" class="h-9 px-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex items-center justify-between text-xs text-gray-500 shrink-0">
+          <div class="flex items-center space-x-4">
+            <span id="statWords">0 kata</span>
+            <span id="statChars">0 karakter</span>
+          </div>
+          <div class="flex items-center space-x-3">
+            <span id="statSavedTime" class="text-green-600 dark:text-green-400 font-medium">Tersimpan</span>
+            <span id="statLastModified">Diubah: -</span>
+          </div>
+        </div>
+
+        <div id="emptyEditorState" class="absolute inset-0 bg-white dark:bg-gray-950 flex flex-col items-center justify-center text-center p-6 z-10 hidden">
+          <div class="w-16 h-16 rounded-full bg-brand-50 dark:bg-gray-900 text-brand-500 flex items-center justify-center text-2xl mb-4"><i class="fa-regular fa-file-lines"></i></div>
+          <h3 class="text-lg font-bold text-gray-700 dark:text-gray-200 mb-1">Tidak ada catatan terpilih</h3>
+          <p class="text-sm text-gray-500 max-w-sm mb-4">Pilih catatan dari daftar sebelah kiri atau buat catatan baru untuk memulai.</p>
+          <button id="btnEmptyStateNewNote" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">+ Buat Catatan Baru</button>
+        </div>
+      </main>
+    </div>
+
+    <button id="fabNewNote" class="fixed bottom-6 right-6 w-14 h-14 bg-brand-600 hover:bg-brand-700 text-white rounded-full shadow-xl flex items-center justify-center z-40 transition-all duration-200 hover:scale-110 active:scale-95 md:hidden" title="Catatan Baru">
+      <i class="fa-solid fa-plus text-xl"></i>
+    </button>
+  </div>
+
+  <!-- FOLDER MODAL -->
+  <div id="folderModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+      <h3 id="folderModalTitle" class="text-lg font-bold">Buat Folder Baru</h3>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Nama Folder</label>
+        <input type="text" id="folderNameInput" placeholder="Masukkan nama folder..." class="w-full px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 border border-transparent dark:border-gray-700">
+      </div>
+      <div class="flex justify-end space-x-2 pt-2">
+        <button id="btnCancelFolderModal" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Batal</button>
+        <button id="btnConfirmFolderModal" class="px-4 py-2 text-sm bg-brand-600 text-white hover:bg-brand-700 rounded-lg font-medium">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCNxkZMnSXWP-kVuKGYUN7dOORC-Hb_4ko",
+      authDomain: "noted-app-1a9c2.firebaseapp.com",
+      projectId: "noted-app-1a9c2",
+      storageBucket: "noted-app-1a9c2.firebasestorage.app",
+      messagingSenderId: "688617687012",
+      appId: "1:688617687012:web:05c8d00f5d1db3b429e9f1"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let currentUser = null;
+    let state = {
+      folders: [], notes: [], activeCategory: 'all', activeNoteId: null,
+      searchQuery: '', activeTagFilter: null, sortOrder: 'updatedDesc', viewMode: 'list'
+    };
+    let folderModalContext = { mode: 'create', folderId: null, parentId: null };
+    let unsubscribeFolders = null;
+    let unsubscribeNotes = null;
+
+    function handleRegister() {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      if (!email || !password) return showAuthError('Email dan password harus diisi');
+      if (password.length < 6) return showAuthError('Password minimal 6 karakter');
+
+      const btn = document.getElementById('btnRegister');
+      btn.innerHTML = '<span class="loading"></span> Mendaftar...';
+      btn.disabled = true;
+
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(async (userCredential) => {
+          const uid = userCredential.user.uid;
+          const rootFolderId = 'f_' + Date.now();
+          await db.collection('users').doc(uid).collection('folders').doc(rootFolderId).set({
+            name: 'Catatan Saya', parentId: null, isOpen: true, 
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+          });
+          await db.collection('users').doc(uid).collection('notes').add({
+            title: 'Selamat Datang di Noted! 🚀',
+            content: '<h2>Aplikasi Catatan Lengkap</h2><p>Catatan ini tersimpan aman di cloud dan bisa diakses dari perangkat mana saja.</p>',
+            folderId: rootFolderId, tags: ['Petunjuk'], isFavorite: true, isTrash: false,
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+          });
+        })
+        .catch((error) => showAuthError(error.message))
+        .finally(() => {
+          btn.innerHTML = 'Daftar Akun Baru';
+          btn.disabled = false;
+        });
+    }
+
+    function handleLogin() {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value;
+      if (!email || !password) return showAuthError('Email dan password harus diisi');
+
+      const btn = document.getElementById('btnLogin');
+      btn.innerHTML = '<span class="loading"></span> Masuk...';
+      btn.disabled = true;
+
+      auth.signInWithEmailAndPassword(email, password)
+        .catch((error) => showAuthError(error.message))
+        .finally(() => {
+          btn.innerHTML = 'Masuk';
+          btn.disabled = false;
+        });
+    }
+
+    function handleLogout() {
+      if(confirm('Yakin ingin keluar?')) auth.signOut();
+    }
+
+    function showAuthError(message) {
+      const errorDiv = document.getElementById('authError');
+      let msg = message;
+      if (message.includes('user-not-found') || message.includes('wrong-password')) msg = 'Email atau password salah.';
+      if (message.includes('email-already-in-use')) msg = 'Email sudah terdaftar. Silakan login.';
+      if (message.includes('weak-password')) msg = 'Password terlalu lemah (min. 6 karakter).';
+      if (message.includes('configuration-not-found')) msg = 'Authentication belum diaktifkan di Firebase Console.';
+      
+      errorDiv.textContent = msg;
+      errorDiv.classList.remove('hidden');
+      setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+    }
+
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('authScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        document.getElementById('userEmailDisplay').textContent = user.email;
+        document.getElementById('userAvatar').textContent = user.email.charAt(0).toUpperCase();
+        setupRealtimeListeners();
+      } else {
+        currentUser = null;
+        document.getElementById('authScreen').classList.remove('hidden');
+        document.getElementById('mainApp').classList.add('hidden');
+        if (unsubscribeNotes) { unsubscribeNotes(); unsubscribeNotes = null; }
+        if (unsubscribeFolders) { unsubscribeFolders(); unsubscribeFolders = null; }
+      }
+    });
+
+    function setupRealtimeListeners() {
+      if (!currentUser) return;
+      const uid = currentUser.uid;
+
+      if (unsubscribeFolders) unsubscribeFolders();
+      unsubscribeFolders = db.collection('users').doc(uid).collection('folders')
+        .onSnapshot((snapshot) => {
+          state.folders = [];
+          snapshot.forEach((doc) => state.folders.push({ id: doc.id, ...doc.data() }));
+          renderFolderTree();
+          if (state.activeNoteId) {
+            populateFolderDropdown();
+          }
+        }, (error) => console.error("Folders error:", error));
+
+      if (unsubscribeNotes) unsubscribeNotes();
+      unsubscribeNotes = db.collection('users').doc(uid).collection('notes')
+        .onSnapshot((snapshot) => {
+          state.notes = [];
+          snapshot.forEach((doc) => state.notes.push({ id: doc.id, ...doc.data() }));
+          renderNotesList();
+          renderTagsList();
+        }, (error) => console.error("Notes error:", error));
+    }
+
+    async function updateNote(noteId, data) {
+      if (!currentUser || !noteId) return;
+      data.updatedAt = new Date().toISOString();
+      await db.collection('users').doc(currentUser.uid).collection('notes').doc(noteId).update(data);
+    }
+
+    async function addNote(data) {
+      if (!currentUser) return null;
+      data.createdAt = new Date().toISOString();
+      data.updatedAt = new Date().toISOString();
+      const docRef = await db.collection('users').doc(currentUser.uid).collection('notes').add(data);
+      return docRef.id;
+    }
+
+    async function deleteNoteData(noteId) {
+      if (!currentUser || !noteId) return;
+      await db.collection('users').doc(currentUser.uid).collection('notes').doc(noteId).delete();
+    }
+
+    async function updateFolder(folderId, data) {
+      if (!currentUser || !folderId) return;
+      data.updatedAt = new Date().toISOString();
+      await db.collection('users').doc(currentUser.uid).collection('folders').doc(folderId).update(data);
+    }
+
+    async function addFolder(data) {
+      if (!currentUser) return null;
+      data.createdAt = new Date().toISOString();
+      data.updatedAt = new Date().toISOString();
+      const docRef = await db.collection('users').doc(currentUser.uid).collection('folders').add(data);
+      return docRef.id;
+    }
+
+    async function deleteFolderData(folderId) {
+      if (!currentUser || !folderId) return;
+      await db.collection('users').doc(currentUser.uid).collection('folders').doc(folderId).delete();
+    }
+
+    function renderFolderTree() {
+      const container = document.getElementById('folderTreeContainer');
+      container.innerHTML = '';
+      function buildTreeNodes(parentId, depth = 0) {
+        const children = state.folders.filter(f => f.parentId === parentId);
+        if (!children.length) return '';
+        let html = '<div class="space-y-1">';
+        children.forEach(folder => {
+          const isSelected = state.activeCategory === folder.id;
+          const hasChildren = state.folders.some(f => f.parentId === folder.id);
+          const paddingLeft = (depth * 16) + 12;
+          html += `<div class="folder-item group flex items-center justify-between rounded-lg cursor-pointer transition-colors ${isSelected ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300'}" style="padding-left: ${paddingLeft}px">
+            <div class="flex items-center space-x-3 truncate flex-1" onclick="selectCategory('${folder.id}')">
+              ${hasChildren ? `<button onclick="event.stopPropagation(); toggleFolderOpen('${folder.id}')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 w-5 h-5 flex items-center justify-center"><i class="fa-solid fa-chevron-${folder.isOpen ? 'down' : 'right'} text-xs"></i></button>` : '<span class="w-5"></span>'}
+              <i class="fa-regular fa-folder${folder.isOpen ? '-open' : ''} text-amber-500"></i>
+              <span class="truncate">${escapeHtml(folder.name)}</span>
+            </div>
+            <div class="hidden group-hover:flex items-center space-x-1 pl-1">
+              <button onclick="event.stopPropagation(); openFolderModal('createSub', '${folder.id}')" class="p-1.5 hover:text-brand-500 text-gray-400"><i class="fa-solid fa-plus text-sm"></i></button>
+              <button onclick="event.stopPropagation(); openFolderModal('rename', '${folder.id}')" class="p-1.5 hover:text-brand-500 text-gray-400"><i class="fa-solid fa-pen text-sm"></i></button>
+              <button onclick="event.stopPropagation(); deleteFolder('${folder.id}')" class="p-1.5 hover:text-red-500 text-gray-400"><i class="fa-solid fa-trash text-sm"></i></button>
+            </div>
+          </div>`;
+          if (hasChildren && folder.isOpen) html += buildTreeNodes(folder.id, depth + 1);
+        });
+        return html + '</div>';
+      }
+      container.innerHTML = buildTreeNodes(null, 0) || `<div class="text-sm text-gray-400 px-3 py-3 italic">Belum ada folder</div>`;
+      updateSidebarCounts();
+    }
+
+    function toggleFolderOpen(folderId) {
+      const folder = state.folders.find(f => f.id === folderId);
+      if (folder) {
+        folder.isOpen = !folder.isOpen;
+        updateFolder(folderId, { isOpen: folder.isOpen });
+      }
+    }
+
+    function updateSidebarCounts() {
+      const activeNotes = state.notes.filter(n => !n.isTrash);
+      document.getElementById('countAllNotes').innerText = activeNotes.length;
+      document.getElementById('countFavorites').innerText = activeNotes.filter(n => n.isFavorite).length;
+      document.getElementById('countTrash').innerText = state.notes.filter(n => n.isTrash).length;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('bg-gray-100', 'dark:bg-gray-800', 'text-brand-600', 'font-semibold'));
+      if (state.activeCategory === 'all') document.getElementById('navAllNotes').classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-brand-600', 'font-semibold');
+      if (state.activeCategory === 'favorites') document.getElementById('navFavorites').classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-brand-600', 'font-semibold');
+      if (state.activeCategory === 'trash') document.getElementById('navTrash').classList.add('bg-gray-100', 'dark:bg-gray-800', 'text-brand-600', 'font-semibold');
+    }
+
+    function renderTagsList() {
+      const tagContainer = document.getElementById('tagListContainer');
+      tagContainer.innerHTML = '';
+      const allTags = new Set();
+      state.notes.filter(n => !n.isTrash).forEach(n => { if (Array.isArray(n.tags)) n.tags.forEach(t => allTags.add(t)); });
+      if (allTags.size === 0) { tagContainer.innerHTML = `<span class="text-sm text-gray-400 italic">Tidak ada tag</span>`; return; }
+      allTags.forEach(tag => {
+        const isSelected = state.activeTagFilter === tag;
+        const btn = document.createElement('button');
+        btn.className = `text-sm px-3 py-1 rounded-full border transition-colors ${isSelected ? 'bg-brand-500 text-white border-brand-500' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-brand-500'}`;
+        btn.innerText = `#${tag}`;
+        btn.onclick = () => { state.activeTagFilter = isSelected ? null : tag; renderNotesList(); renderTagsList(); updateFilterBadge(); };
+        tagContainer.appendChild(btn);
+      });
+    }
+
+    function updateFilterBadge() {
+      const badgeBar = document.getElementById('filterBadgeBar');
+      if (state.activeTagFilter || state.searchQuery) {
+        badgeBar.classList.remove('hidden');
+        let text = [];
+        if (state.searchQuery) text.push(`Cari: "${state.searchQuery}"`);
+        if (state.activeTagFilter) text.push(`Tag: #${state.activeTagFilter}`);
+        document.getElementById('filterBadgeText').innerText = text.join(' | ');
+      } else { badgeBar.classList.add('hidden'); }
+    }
+
+    function renderNotesList() {
+      const container = document.getElementById('notesContainer');
+      container.innerHTML = '';
+      let filtered = state.notes.filter(note => {
+        if (state.activeCategory === 'trash') { if (!note.isTrash) return false; } 
+        else {
+          if (note.isTrash) return false;
+          if (state.activeCategory === 'favorites' && !note.isFavorite) return false;
+          if (state.activeCategory !== 'all' && state.activeCategory !== 'favorites' && note.folderId !== state.activeCategory) return false;
+        }
+        if (state.activeTagFilter && (!note.tags || !note.tags.includes(state.activeTagFilter))) return false;
+        if (state.searchQuery) {
+          const q = state.searchQuery.toLowerCase();
+          if (!note.title.toLowerCase().includes(q) && !stripHtml(note.content).toLowerCase().includes(q) && !(note.tags && note.tags.some(t => t.toLowerCase().includes(q)))) return false;
+        }
+        return true;
+      });
+
+      filtered.sort((a, b) => state.sortOrder === 'titleAsc' ? a.title.localeCompare(b.title) : new Date(b.updatedAt) - new Date(a.updatedAt));
+      document.getElementById('notesCountSubtitle').innerText = `${filtered.length} Catatan`;
+      
+      const titleEl = document.getElementById('currentCategoryTitle');
+      if (state.activeCategory === 'all') titleEl.innerText = 'Semua Catatan';
+      else if (state.activeCategory === 'favorites') titleEl.innerText = 'Catatan Favorit';
+      else if (state.activeCategory === 'trash') titleEl.innerText = 'Sampah';
+      else { const folder = state.folders.find(f => f.id === state.activeCategory); titleEl.innerText = folder ? folder.name : 'Catatan'; }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-gray-400 space-y-2"><i class="fa-regular fa-folder-open text-3xl"></i><p class="text-sm">Tidak ada catatan ditemukan</p></div>`;
+        if (!filtered.some(n => n.id === state.activeNoteId)) showEmptyEditorState(true);
+        return;
+      }
+
+      if (!state.activeNoteId || !filtered.some(n => n.id === state.activeNoteId)) { state.activeNoteId = filtered[0].id; }
+      container.className = state.viewMode === 'grid' ? 'flex-1 overflow-y-auto p-2 grid grid-cols-1 gap-2' : 'flex-1 overflow-y-auto p-2 space-y-2';
+
+      filtered.forEach(note => {
+        const isActive = note.id === state.activeNoteId;
+        const plainPreview = stripHtml(note.content).substring(0, 90) || 'Catatan kosong...';
+        const card = document.createElement('div');
+        // PERUBAHAN: Warna sorotan lebih subtle dan ukuran lebih compact
+        card.className = `p-3 rounded-xl cursor-pointer border transition-all duration-150 ${isActive ? 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700' : 'bg-white dark:bg-gray-950 border-gray-100 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'}`;
+        card.onclick = () => selectNote(note.id);
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-2 mb-1.5">
+            <h4 class="font-semibold text-sm truncate ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-800 dark:text-gray-100'}">${escapeHtml(note.title) || 'Tanpa Judul'}</h4>
+            ${note.isFavorite ? '<i class="fa-solid fa-star text-amber-500 text-sm shrink-0 mt-0.5"></i>' : ''}
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-2 leading-relaxed font-normal">${escapeHtml(plainPreview)}</p>
+          <div class="flex items-center justify-between text-xs text-gray-400 pt-1.5 border-t border-gray-200 dark:border-gray-800">
+            <span>${formatDate(note.updatedAt)}</span>
+            ${note.tags && note.tags.length ? `<span class="bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 rounded text-[10px] text-gray-600 dark:text-gray-300 truncate max-w-[100px]">#${escapeHtml(note.tags[0])}</span>` : ''}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      loadActiveNoteToEditor();
+    }
+
+    function closeSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      sidebar.classList.add('-translate-x-full');
+      backdrop.classList.add('opacity-0');
+      setTimeout(() => { backdrop.classList.add('hidden'); }, 200);
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      const isClosed = sidebar.classList.contains('-translate-x-full');
+      if (isClosed) {
+        sidebar.classList.remove('-translate-x-full');
+        backdrop.classList.remove('hidden');
+        setTimeout(() => backdrop.classList.remove('opacity-0'), 10);
+      } else { closeSidebar(); }
+    }
+
+    function selectCategory(catId) {
+      state.activeCategory = catId;
+      state.activeTagFilter = null;
+      renderFolderTree(); renderNotesList();
+      if (window.innerWidth < 768) closeSidebar();
+    }
+
+    function showEditorUI() {
+      document.getElementById('notesListPanel').classList.add('hidden');
+      document.getElementById('editorPanel').classList.remove('hidden');
+    }
+
+    function showListUI() {
+      document.getElementById('editorPanel').classList.add('hidden');
+      document.getElementById('notesListPanel').classList.remove('hidden');
+    }
+
+    function selectNote(noteId) {
+      state.activeNoteId = noteId;
+      renderNotesList();
+      if (window.innerWidth < 768) {
+        showEditorUI(); closeSidebar();
+        history.pushState({ view: 'editor', noteId: noteId }, '', '#editor');
+      }
+    }
+
+    async function createNewNote() {
+      const newFolderId = (state.activeCategory !== 'all' && state.activeCategory !== 'favorites' && state.activeCategory !== 'trash') 
+        ? state.activeCategory : (state.folders[0] ? state.folders[0].id : null);
+
+      const newNote = {
+        title: 'Catatan Tanpa Judul', content: '', folderId: newFolderId,
+        tags: [], isFavorite: false, isTrash: false
+      };
+
+      const newId = await addNote(newNote);
+      if (newId) {
+        state.activeNoteId = newId;
+        setTimeout(() => {
+          const titleInput = document.getElementById('noteTitleInput');
+          if (titleInput) { titleInput.focus(); titleInput.select(); }
+        }, 100);
+
+        if (window.innerWidth < 768) {
+          showEditorUI(); closeSidebar();
+          history.pushState({ view: 'editor', noteId: newId }, '', '#editor');
+        }
+      }
+    }
+
+    function handleBackNavigation() {
+      if (window.innerWidth < 768 && !document.getElementById('editorPanel').classList.contains('hidden')) {
+        showListUI();
+        if (window.location.hash === '#editor') history.back(); 
+      }
+    }
+
+    window.addEventListener('popstate', (event) => {
+      if (!document.getElementById('editorPanel').classList.contains('hidden')) showListUI();
+    });
+
+    function populateFolderDropdown() {
+      const select = document.getElementById('noteFolderSelect');
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (!note) return;
+      
+      select.innerHTML = '<option value=""> (Tanpa Folder)</option>';
+      
+      function appendOptions(parentId, depth = 0) {
+        state.folders.filter(f => f.parentId === parentId).forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f.id; 
+          opt.innerText = `${'\u00A0\u00A0'.repeat(depth)}📁 ${f.name}`;
+          if (f.id === note.folderId) opt.selected = true;
+          select.appendChild(opt); 
+          appendOptions(f.id, depth + 1);
+        });
+      }
+      
+      appendOptions(null, 0);
+    }
+
+    function loadActiveNoteToEditor() {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (!note) { showEmptyEditorState(true); return; }
+      showEmptyEditorState(false);
+      
+      populateFolderDropdown();
+
+      document.getElementById('noteTitleInput').value = note.title || '';
+      document.getElementById('noteContentEditor').innerHTML = note.content || '';
+      
+      const tagContainer = document.getElementById('activeTagsContainer');
+      tagContainer.innerHTML = '';
+      (note.tags || []).forEach(t => {
+        const tagChip = document.createElement('span');
+        tagChip.className = 'inline-flex items-center space-x-1 text-sm bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300 px-3 py-1 rounded-md border border-brand-200 dark:border-brand-800';
+        tagChip.innerHTML = `<span>#${escapeHtml(t)}</span><button onclick="removeTagFromActiveNote('${escapeHtml(t)}')" class="hover:text-red-500 ml-1"><i class="fa-solid fa-xmark text-xs"></i></button>`;
+        tagContainer.appendChild(tagChip);
+      });
+
+      const favIcon = document.getElementById('favIcon');
+      favIcon.className = note.isFavorite ? 'fa-solid fa-star text-amber-500 text-lg' : 'fa-regular fa-star text-lg';
+
+      const btnDelete = document.getElementById('btnDeleteNote');
+      const btnFav = document.getElementById('btnToggleFavorite');
+      const btnRestore = document.getElementById('btnRestoreNote');
+      const btnPermanent = document.getElementById('btnPermanentDelete');
+      const contentEditor = document.getElementById('noteContentEditor');
+      const titleInput = document.getElementById('noteTitleInput');
+
+      if (note.isTrash) {
+        btnDelete.classList.add('hidden'); btnFav.classList.add('hidden');
+        btnRestore.classList.remove('hidden'); btnPermanent.classList.remove('hidden');
+        contentEditor.setAttribute('contenteditable', 'false'); titleInput.setAttribute('disabled', 'true');
+      } else {
+        btnDelete.classList.remove('hidden'); btnFav.classList.remove('hidden');
+        btnRestore.classList.add('hidden'); btnPermanent.classList.add('hidden');
+        contentEditor.setAttribute('contenteditable', 'true'); titleInput.removeAttribute('disabled');
+      }
+      updateNoteStats();
+    }
+
+    function showEmptyEditorState(isEmpty) {
+      document.getElementById('emptyEditorState').classList.toggle('hidden', !isEmpty);
+    }
+
+    function updateNoteStats() {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (!note) return;
+      const text = stripHtml(note.content);
+      document.getElementById('statWords').innerText = `${text.trim() ? text.trim().split(/\s+/).length : 0} kata`;
+      document.getElementById('statChars').innerText = `${text.length} karakter`;
+      document.getElementById('statLastModified').innerText = `Diubah: ${formatDate(note.updatedAt)}`;
+    }
+
+    let saveTimeout = null;
+    function autoSaveActiveNote() {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(async () => {
+        const note = state.notes.find(n => n.id === state.activeNoteId);
+        if (!note || note.isTrash) return;
+        const newTitle = document.getElementById('noteTitleInput').value;
+        const newContent = document.getElementById('noteContentEditor').innerHTML;
+        if (note.title !== newTitle || note.content !== newContent) {
+          await updateNote(note.id, { title: newTitle, content: newContent });
+          updateNoteStats();
+          const activeCardTitle = document.querySelector(`[onclick="selectNote('${note.id}')"] h4`);
+          if (activeCardTitle) activeCardTitle.innerText = newTitle || 'Tanpa Judul';
+          const statSaved = document.getElementById('statSavedTime');
+          statSaved.innerText = 'Menyimpan...';
+          setTimeout(() => { statSaved.innerText = 'Tersimpan'; }, 1000);
+        }
+      }, 500);
+    }
+
+    async function addTagToActiveNote(tagName) {
+      const cleanTag = tagName.trim().replace(/^#/, '');
+      if (!cleanTag) return;
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (note && !note.tags.includes(cleanTag)) {
+        await updateNote(note.id, { tags: [...note.tags, cleanTag] });
+      }
+    }
+
+    async function removeTagFromActiveNote(tagName) {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (note) {
+        await updateNote(note.id, { tags: note.tags.filter(t => t !== tagName) });
+      }
+    }
+
+    async function toggleFavorite() {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (note) await updateNote(note.id, { isFavorite: !note.isFavorite });
+    }
+
+    async function moveNoteToTrash() {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (note) {
+        await updateNote(note.id, { isTrash: true });
+        state.activeNoteId = null;
+      }
+    }
+
+    async function restoreNoteFromTrash() {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (note) await updateNote(note.id, { isTrash: false });
+    }
+
+    async function deleteNotePermanently() {
+      if (confirm('Hapus catatan ini secara permanen?')) {
+        await deleteNoteData(state.activeNoteId);
+        state.activeNoteId = null;
+      }
+    }
+
+    function openFolderModal(mode, targetId = null) {
+      folderModalContext = { mode, folderId: mode === 'rename' ? targetId : null, parentId: mode === 'createSub' ? targetId : null };
+      const title = document.getElementById('folderModalTitle');
+      const input = document.getElementById('folderNameInput');
+      if (mode === 'createRoot') { title.innerText = 'Buat Folder Utama Baru'; input.value = ''; } 
+      else if (mode === 'createSub') { const parent = state.folders.find(f => f.id === targetId); title.innerText = `Sub-folder di "${parent ? parent.name : ''}"`; input.value = ''; } 
+      else if (mode === 'rename') { const current = state.folders.find(f => f.id === targetId); title.innerText = 'Ubah Nama Folder'; input.value = current ? current.name : ''; }
+      document.getElementById('folderModal').classList.remove('hidden');
+      setTimeout(() => input.focus(), 50);
+    }
+
+    function closeFolderModal() { document.getElementById('folderModal').classList.add('hidden'); }
+
+    async function handleSaveFolder() {
+      const name = document.getElementById('folderNameInput').value.trim();
+      if (!name) return;
+      if (folderModalContext.mode === 'createRoot' || folderModalContext.mode === 'createSub') {
+        await addFolder({ name, parentId: folderModalContext.parentId, isOpen: true });
+      } else if (folderModalContext.mode === 'rename') {
+        await updateFolder(folderModalContext.folderId, { name });
+      }
+      closeFolderModal();
+    }
+
+    async function deleteFolder(folderId) {
+      if (confirm('Hapus folder ini? Catatan di dalamnya akan dipindahkan ke tanpa folder.')) {
+        const idsToDelete = [folderId];
+        function collectChildren(pId) {
+          state.folders.filter(f => f.parentId === pId).forEach(child => { idsToDelete.push(child.id); collectChildren(child.id); });
+        }
+        collectChildren(folderId);
+        
+        for (const note of state.notes) {
+          if (idsToDelete.includes(note.folderId)) {
+            await updateNote(note.id, { folderId: null });
+          }
+        }
+        for (const id of idsToDelete) {
+          await deleteFolderData(id);
+        }
+        if (state.activeCategory === folderId) state.activeCategory = 'all';
+      }
+    }
+
+    function stripHtml(html) { 
+      const tmp = document.createElement('DIV'); 
+      tmp.innerHTML = html; 
+      return tmp.textContent || tmp.innerText || ''; 
+    }
+    
+    function escapeHtml(str) { return (str || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+    function formatDate(isoStr) { if (!isoStr) return ''; return new Date(isoStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+
+    async function exportNote(format) {
+      const note = state.notes.find(n => n.id === state.activeNoteId);
+      if (!note) {
+        alert('Pilih catatan terlebih dahulu untuk diekspor.');
+        return;
+      }
+
+      let content = '';
+      let safeTitle = (note.title || 'catatan').replace(/[^a-z0-9._-]/gi, '_').substring(0, 50);
+      if (!safeTitle || safeTitle === '_') safeTitle = 'catatan';
+      let filename = safeTitle + '.' + format;
+      let mimeType = 'text/plain';
+
+      switch(format) {
+        case 'txt':
+          content = `${note.title}\n\n${htmlToPlainText(note.content)}`;
+          mimeType = 'text/plain';
+          break;
+        case 'json':
+          content = JSON.stringify({
+            title: note.title,
+            content: note.content,
+            tags: note.tags,
+            isFavorite: note.isFavorite,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt
+          }, null, 2);
+          mimeType = 'application/json';
+          break;
+        case 'md':
+          content = `# ${note.title}\n\n${htmlToMarkdown(note.content)}`;
+          mimeType = 'text/markdown';
+          break;
+        case 'html':
+          content = `<!DOCTYPE html>\n<html lang="id">\n<head>\n<meta charset="utf-8">\n<title>${escapeHtml(note.title)}</title>\n<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;line-height:1.6;}</style>\n</head>\n<body>\n<h1>${escapeHtml(note.title)}</h1>\n<div>${note.content}</div>\n</body>\n</html>`;
+          mimeType = 'text/html';
+          break;
+        case 'pdf':
+          await exportToPDF(note);
+          document.getElementById('exportDropdown').classList.add('hidden');
+          return;
+        case 'csv':
+          content = exportToCSV(note);
+          mimeType = 'text/csv';
+          break;
+      }
+
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + content], { type: mimeType + ';charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      document.getElementById('exportDropdown').classList.add('hidden');
+    }
+
+    async function exportToPDF(note) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      
+      const safeTitle = (note.title || 'Catatan').substring(0, 50);
+      const textContent = htmlToPlainText(note.content);
+      
+      doc.setFont("helvetica");
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      doc.text(safeTitle, 10, 20);
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Tanggal: ${formatDate(note.updatedAt)}`, 10, 30);
+      if (note.tags && note.tags.length > 0) {
+        doc.text(`Tag: ${note.tags.join(', ')}`, 10, 36);
+      }
+      
+      doc.setFontSize(12);
+      const lines = doc.splitTextToSize(textContent, 190);
+      doc.text(lines, 10, 50);
+      
+      doc.save(`${safeTitle}.pdf`);
+    }
+
+    function exportToCSV(note) {
+      const safeTitle = (note.title || 'Catatan').replace(/"/g, '""');
+      const textContent = htmlToPlainText(note.content).replace(/"/g, '""');
+      const tags = (note.tags || []).join(', ').replace(/"/g, '""');
+      
+      let csv = '"Judul","Isi","Tag","Tanggal Dibuat","Tanggal Diubah","Favorit"\n';
+      csv += `"${safeTitle}","${textContent}","${tags}","${note.createdAt}","${note.updatedAt}","${note.isFavorite ? 'Ya' : 'Tidak'}"`;
+      
+      return csv;
+    }
+
+    function htmlToPlainText(html) {
+      let text = html
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/h1>/gi, '\n\n')
+        .replace(/<\/h2>/gi, '\n\n')
+        .replace(/<\/h3>/gi, '\n\n')
+        .replace(/<\/li>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n')
+        .trim();
+      
+      return text;
+    }
+
+    function htmlToMarkdown(html) {
+      let md = html
+        .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n')
+        .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n')
+        .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n')
+        .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+        .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+        .replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*')
+        .replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*')
+        .replace(/<u[^>]*>(.*?)<\/u>/gi, '_$1_')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
+        .replace(/<[^>]+>/g, '');
+      
+      const txt = document.createElement('textarea');
+      txt.innerHTML = md;
+      return txt.value.trim();
+    }
+
+    window.onload = function() {
+      if (localStorage.getItem('NOTED_THEME') === 'dark' || (!('NOTED_THEME' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+        document.getElementById('themeIcon').className = 'fa-solid fa-sun';
+      }
+      document.getElementById('themeToggle').onclick = () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        document.getElementById('themeIcon').className = isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
+        localStorage.setItem('NOTED_THEME', isDark ? 'dark' : 'light');
+      };
+
+      document.getElementById('btnUserMenu').onclick = (e) => { e.stopPropagation(); document.getElementById('userMenuDropdown').classList.toggle('hidden'); };
+      document.getElementById('btnExportNote').onclick = (e) => { e.stopPropagation(); document.getElementById('exportDropdown').classList.toggle('hidden'); };
+      
+      document.addEventListener('click', () => { 
+        document.getElementById('userMenuDropdown').classList.add('hidden'); 
+        document.getElementById('exportDropdown').classList.add('hidden');
+      });
+
+      document.getElementById('btnNewNote').onclick = createNewNote;
+      document.getElementById('fabNewNote').onclick = createNewNote;
+      document.getElementById('btnEmptyStateNewNote').onclick = createNewNote;
+      document.getElementById('btnAddRootFolder').onclick = () => openFolderModal('createRoot');
+      document.getElementById('navAllNotes').onclick = () => selectCategory('all');
+      document.getElementById('navFavorites').onclick = () => selectCategory('favorites');
+      document.getElementById('navTrash').onclick = () => selectCategory('trash');
+
+      document.getElementById('noteTitleInput').addEventListener('input', autoSaveActiveNote);
+      document.getElementById('noteContentEditor').addEventListener('input', autoSaveActiveNote);
+
+      document.getElementById('noteFolderSelect').addEventListener('change', async (e) => {
+        const note = state.notes.find(n => n.id === state.activeNoteId);
+        if (note) {
+          const newFolderId = e.target.value || null;
+          await updateNote(note.id, { folderId: newFolderId });
+          renderNotesList();
+        }
+      });
+
+      document.getElementById('addTagInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); addTagToActiveNote(e.target.value); e.target.value = ''; }
+      });
+
+      document.getElementById('btnToggleFavorite').onclick = toggleFavorite;
+      document.getElementById('btnDeleteNote').onclick = moveNoteToTrash;
+      document.getElementById('btnRestoreNote').onclick = restoreNoteFromTrash;
+      document.getElementById('btnPermanentDelete').onclick = deleteNotePermanently;
+
+      function updateToolbarActiveStates() {
+        document.querySelectorAll('.tb-btn').forEach(btn => {
+          const cmd = btn.getAttribute('data-cmd');
+          const val = btn.getAttribute('data-val');
+          let isActive = false;
+          if (!cmd) return;
+          if (cmd === 'formatBlock' && val) {
+            const currentBlock = document.queryCommandValue('formatBlock').toString().toLowerCase().replace(/[<>]/g, '').trim();
+            const cleanVal = val.toLowerCase().replace(/[<>]/g, '').trim();
+            isActive = (currentBlock === cleanVal) || (cleanVal.startsWith('h') && currentBlock === `heading ${cleanVal.replace('h', '')}`);
+          } else {
+            try { isActive = document.queryCommandState(cmd); } catch(e) {}
+          }
+          if (isActive) btn.classList.add('is-active');
+          else btn.classList.remove('is-active');
+        });
+      }
+
+      document.querySelectorAll('.tb-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const cmd = btn.getAttribute('data-cmd');
+          const val = btn.getAttribute('data-val') || null;
+          if (cmd) {
+            const execVal = (cmd === 'formatBlock' && val) ? `<${val}>` : val;
+            try { document.execCommand(cmd, false, execVal); } catch(e) {}
+            document.getElementById('noteContentEditor').focus();
+            autoSaveActiveNote();
+            setTimeout(updateToolbarActiveStates, 50);
+          }
+        });
+      });
+
+      document.getElementById('textColorPicker').addEventListener('input', (e) => {
+        document.execCommand('foreColor', false, e.target.value);
+        document.getElementById('noteContentEditor').focus();
+        autoSaveActiveNote();
+      });
+      document.getElementById('textColorPicker').addEventListener('click', (e) => { e.stopPropagation(); showToolbar(); });
+
+      document.getElementById('highlightColorPicker').addEventListener('input', (e) => {
+        let success = document.execCommand('hiliteColor', false, e.target.value);
+        if (!success) document.execCommand('backColor', false, e.target.value);
+        document.getElementById('noteContentEditor').focus();
+        autoSaveActiveNote();
+      });
+      document.getElementById('highlightColorPicker').addEventListener('click', (e) => { e.stopPropagation(); showToolbar(); });
+
+      document.getElementById('toggleMoreTools').addEventListener('click', (e) => {
+        e.preventDefault();
+        showToolbar();
+        document.getElementById('expandedTools').classList.toggle('hidden');
+      });
+
+      const editor = document.getElementById('noteContentEditor');
+      editor.addEventListener('keyup', updateToolbarActiveStates);
+      editor.addEventListener('mouseup', updateToolbarActiveStates);
+      editor.addEventListener('click', updateToolbarActiveStates);
+
+      const searchInput = document.getElementById('searchInput');
+      const clearSearchBtn = document.getElementById('clearSearchBtn');
+      searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value.trim();
+        clearSearchBtn.classList.toggle('hidden', !state.searchQuery);
+        renderNotesList(); updateFilterBadge();
+      });
+      clearSearchBtn.onclick = () => { searchInput.value = ''; state.searchQuery = ''; clearSearchBtn.classList.add('hidden'); renderNotesList(); updateFilterBadge(); };
+      
+      document.getElementById('btnClearFilter').onclick = () => {
+        searchInput.value = ''; state.searchQuery = ''; state.activeTagFilter = null;
+        clearSearchBtn.classList.add('hidden'); renderNotesList(); renderTagsList(); updateFilterBadge();
+      };
+
+      document.getElementById('btnSort').onclick = () => { state.sortOrder = state.sortOrder === 'updatedDesc' ? 'titleAsc' : 'updatedDesc'; renderNotesList(); };
+      document.getElementById('btnToggleLayout').onclick = () => {
+        state.viewMode = state.viewMode === 'list' ? 'grid' : 'list';
+        document.getElementById('layoutIcon').className = state.viewMode === 'grid' ? 'fa-solid fa-border-all' : 'fa-solid fa-list';
+        renderNotesList();
+      };
+
+      document.getElementById('btnCancelFolderModal').onclick = closeFolderModal;
+      document.getElementById('btnConfirmFolderModal').onclick = handleSaveFolder;
+
+      document.getElementById('toggleSidebarMobile').onclick = toggleSidebar;
+      document.getElementById('sidebarBackdrop').onclick = closeSidebar;
+      document.getElementById('btnBackToList').onclick = handleBackNavigation;
+
+      const toolbar = document.getElementById('formattingToolbarContainer');
+      const titleInput = document.getElementById('noteTitleInput');
+      let hideTimeout;
+
+      function showToolbar() {
+        clearTimeout(hideTimeout);
+        toolbar.classList.remove('hidden');
+        void toolbar.offsetWidth;
+        toolbar.classList.remove('opacity-0', '-translate-y-2');
+        toolbar.classList.add('opacity-100', 'translate-y-0');
+        updateToolbarActiveStates();
+      }
+
+      function hideToolbar() {
+        hideTimeout = setTimeout(() => {
+          if (document.activeElement === editor || document.activeElement === titleInput || toolbar.contains(document.activeElement)) return;
+          toolbar.classList.remove('opacity-100', 'translate-y-0');
+          toolbar.classList.add('opacity-0', '-translate-y-2');
+          setTimeout(() => {
+            if (document.activeElement !== editor && document.activeElement !== titleInput && !toolbar.contains(document.activeElement)) {
+              toolbar.classList.add('hidden');
+            }
+          }, 300);
+        }, 150);
+      }
+
+      editor.addEventListener('focus', showToolbar);
+      titleInput.addEventListener('focus', showToolbar);
+      editor.addEventListener('blur', hideToolbar);
+      titleInput.addEventListener('blur', hideToolbar);
+      editor.addEventListener('keydown', showToolbar);
+      titleInput.addEventListener('keydown', showToolbar);
+
+      let touchStartX = 0, touchStartY = 0;
+      const editorPanel = document.getElementById('editorPanel');
+      editorPanel.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+      }, { passive: true });
+
+      editorPanel.addEventListener('touchend', (e) => {
+        const diffX = e.changedTouches[0].screenX - touchStartX;
+        const diffY = Math.abs(e.changedTouches[0].screenY - touchStartY);
+        if (window.innerWidth < 768 && !editorPanel.classList.contains('hidden') && diffX > 50 && diffX > diffY && touchStartX < 50) {
+          handleBackNavigation();
+        }
+      }, { passive: true });
+    };
+  </script>
+</body>
+</html>
